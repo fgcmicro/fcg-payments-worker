@@ -2,7 +2,9 @@
   "profiles": {
     "FCGPagamentos_Worker": {
       "commandName": "Project",
-      "commandLineArgs": "--port 7251",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
       "launchBrowser": false
     }
   }

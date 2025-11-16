@@ -1,17 +1,17 @@
 using System.Diagnostics;
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.DataContracts;
+using Microsoft.Extensions.Logging;
 
 namespace FCGPagamentos.Worker.Services;
 
 public class ObservabilityService : IObservabilityService
 {
-    private readonly TelemetryClient _telemetryClient;
+    private readonly ILogger<ObservabilityService> _logger;
     private static readonly ActivitySource _activitySource = new("FCGPagamentos.Worker.PaymentProcessing");
+    private Guid? _correlationId;
 
-    public ObservabilityService(TelemetryClient telemetryClient)
+    public ObservabilityService(ILogger<ObservabilityService> logger)
     {
-        _telemetryClient = telemetryClient;
+        _logger = logger;
     }
 
     public Activity? StartPaymentProcessingActivity(Guid paymentId, Guid correlationId)
@@ -26,26 +26,23 @@ public class ObservabilityService : IObservabilityService
             activity.SetTag("service.version", "1.0.0");
         }
 
+        _logger.LogInformation("Iniciando processamento de pagamento. PaymentId: {PaymentId}, CorrelationId: {CorrelationId}", 
+            paymentId, correlationId);
+
         return activity;
     }
 
     public void TrackApiDependency(string operation, string endpoint, TimeSpan duration, bool success)
     {
-        var dependency = new DependencyTelemetry
-        {
-            Type = "HTTP",
-            Name = $"Payments API {operation}",
-            Data = endpoint,
-            Duration = duration,
-            Success = success,
-            Target = "payments-api"
-        };
-
-        _telemetryClient.TrackDependency(dependency);
+        _logger.LogInformation(
+            "Dependência de API: {Operation} | Endpoint: {Endpoint} | Duração: {Duration}ms | Sucesso: {Success}",
+            operation, endpoint, duration.TotalMilliseconds, success);
     }
 
     public void SetCorrelationId(Guid correlationId)
     {
-        _telemetryClient.Context.Operation.Id = correlationId.ToString();
+        _correlationId = correlationId;
+        // CloudWatch Logs pode usar correlation ID através de structured logging
+        _logger.LogInformation("CorrelationId definido: {CorrelationId}", correlationId);
     }
 }

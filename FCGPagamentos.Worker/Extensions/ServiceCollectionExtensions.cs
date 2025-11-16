@@ -1,8 +1,8 @@
 using FCGPagamentos.Worker.Services;
+using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Azure.Storage.Queues;
 
 namespace FCGPagamentos.Worker.Extensions;
 
@@ -21,25 +21,59 @@ public static class ServiceCollectionExtensions
             client.DefaultRequestHeaders.Add("User-Agent", "FCGPagamentos-Worker/1.0");
         });
 
-        // Configurar QueueClientFactory para múltiplas filas
-        services.AddSingleton<IQueueClientFactory>(provider =>
+        // Configurar AWS Credentials
+        var accessKey = configuration["AWS:AccessKey"];
+        var secretKey = configuration["AWS:SecretKey"];
+        var region = configuration["AWS:Region"];
+        var accountId = configuration["AWS:AccountId"];
+
+        if (string.IsNullOrEmpty(accessKey))
+            throw new InvalidOperationException("AWS:AccessKey não configurado");
+        if (string.IsNullOrEmpty(secretKey))
+            throw new InvalidOperationException("AWS:SecretKey não configurado");
+        if (string.IsNullOrEmpty(region))
+            throw new InvalidOperationException("AWS:Region não configurado");
+        if (string.IsNullOrEmpty(accountId))
+            throw new InvalidOperationException("AWS:AccountId não configurado");
+
+        // Configurar MassTransit com Amazon SQS para Kubernetes
+        // Configura tanto consumo quanto publicação de mensagens
+        services.AddMassTransit(x =>
         {
-            var logger = provider.GetRequiredService<ILogger<QueueClientFactory>>();
-            
-            // Tentar diferentes formas de obter a string de conexão
-            var connectionString = configuration["AzureWebJobsStorage"] ?? 
-                                 configuration.GetConnectionString("AzureWebJobsStorage");
-            
-            if (string.IsNullOrEmpty(connectionString))
+            x.UsingAmazonSqs((context, cfg) =>
             {
-                logger.LogError("AzureWebJobsStorage connection string not configured. " +
-                              "Please verify the Application Settings in Azure Function App configuration.");
-                throw new InvalidOperationException("AzureWebJobsStorage connection string not configured");
-            }
-            
-            logger.LogInformation("AzureWebJobsStorage connection string configured successfully");
-            return new QueueClientFactory(connectionString);
+                cfg.Host(region, h =>
+                {
+                    h.AccessKey(accessKey);
+                    h.SecretKey(secretKey);
+                });
+
+                // Configurar filas para consumo
+                cfg.ReceiveEndpoint("game-purchase-requested", e =>
+                {
+                    e.ConfigureConsumer<Workers.GamePurchaseRequestedConsumer>(context);
+                    e.PrefetchCount = 10; // Processar até 10 mensagens por vez
+                });
+
+                cfg.ReceiveEndpoint("payments-to-process", e =>
+                {
+                    e.ConfigureConsumer<Workers.ProcessPaymentConsumer>(context);
+                    e.PrefetchCount = 10; // Processar até 10 mensagens por vez
+                });
+
+                // Configurar publicação
+                cfg.Message<Models.GamePurchaseCompletedEvent>(m =>
+                {
+                    m.SetEntityName("game-purchase-completed");
+                });
+            });
+
+            // Registrar consumers
+            x.AddConsumer<Workers.GamePurchaseRequestedConsumer>();
+            x.AddConsumer<Workers.ProcessPaymentConsumer>();
         });
+
+        // Nota: O MassTransit Hosted Service é automaticamente registrado pelo AddMassTransit
 
         // Registrar serviços
         services.AddScoped<IPaymentService, PaymentService>();

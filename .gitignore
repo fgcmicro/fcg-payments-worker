@@ -4,6 +4,13 @@
 # Azure Functions localsettings file
 local.settings.json
 
+# AppSettings com credenciais (não commitar)
+appsettings.Development.json
+appsettings.Production.json
+appsettings.*.json
+!appsettings.json
+!appsettings.*.example.json
+
 # User-specific files
 *.suo
 *.user

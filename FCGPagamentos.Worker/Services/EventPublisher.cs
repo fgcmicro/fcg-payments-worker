@@ -1,19 +1,18 @@
 using FCGPagamentos.Worker.Models;
+using MassTransit;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
-using Azure.Storage.Queues;
 
 namespace FCGPagamentos.Worker.Services;
 
 public class EventPublisher : IEventPublisher
 {
     private readonly ILogger<EventPublisher> _logger;
-    private readonly IQueueClientFactory _queueClientFactory;
+    private readonly IPublishEndpoint _publishEndpoint;
 
-    public EventPublisher(ILogger<EventPublisher> logger, IQueueClientFactory queueClientFactory)
+    public EventPublisher(ILogger<EventPublisher> logger, IPublishEndpoint publishEndpoint)
     {
         _logger = logger;
-        _queueClientFactory = queueClientFactory;
+        _publishEndpoint = publishEndpoint;
     }
 
     public async Task PublishPaymentProcessingAsync(Guid paymentId, Guid correlationId, CancellationToken cancellationToken = default)
@@ -42,57 +41,44 @@ public class EventPublisher : IEventPublisher
         _logger.LogInformation("Evento recebido: PaymentId={PaymentId}, UserId={UserId}, GameId={GameId}, Amount={Amount}", 
             completedEvent.PaymentId, completedEvent.UserId, completedEvent.GameId, completedEvent.Amount);
         
-        await PublishToQueueAsync("game-purchase-completed", completedEvent, cancellationToken);
+        try
+        {
+            // Publicar usando MassTransit - o nome da fila é configurado via SetEntityName no ServiceCollectionExtensions
+            await _publishEndpoint.Publish(completedEvent, cancellationToken);
+            
+            _logger.LogInformation("✓ Evento GamePurchaseCompleted publicado com sucesso via MassTransit. PaymentId: {PaymentId}", 
+                completedEvent.PaymentId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Erro ao publicar evento GamePurchaseCompleted via MassTransit. PaymentId: {PaymentId}", 
+                completedEvent.PaymentId);
+            throw;
+        }
         
         _logger.LogInformation("=== FIM PUBLICAÇÃO GAME PURCHASE COMPLETED ===");
     }
 
-    // Método genérico para publicar em qualquer fila
+    // Método genérico para publicar em qualquer fila usando MassTransit
     public async Task PublishToQueueAsync<T>(string queueName, T eventData, CancellationToken cancellationToken = default)
     {
         try
         {
-            _logger.LogInformation("Publicando evento na fila {QueueName}", queueName);
+            _logger.LogInformation("Publicando evento na fila SQS {QueueName} via MassTransit", queueName);
 
-            // Serializar evento para JSON
-            var eventJson = JsonSerializer.Serialize(eventData, new JsonSerializerOptions 
-            { 
-                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                WriteIndented = false // Compacto para filas
-            });
-
-            _logger.LogDebug("JSON serializado: {EventJson}", eventJson);
-
-            // Codificar JSON em base64
-            var eventJsonBytes = System.Text.Encoding.UTF8.GetBytes(eventJson);
-            var eventJsonBase64 = Convert.ToBase64String(eventJsonBytes);
-
-            _logger.LogInformation("JSON codificado em Base64: {Base64Length} caracteres", eventJsonBase64.Length);
-            _logger.LogDebug("Conteúdo Base64: {Base64Content}", eventJsonBase64);
-
-            // Verificar se é realmente Base64 válido
-            try
+            // MassTransit publica diretamente o objeto - serialização é automática
+            // Para SQS, o nome da fila é determinado pelo tipo da mensagem ou pode ser configurado via SetEntityName
+            if (eventData == null)
             {
-                var decodedBytes = Convert.FromBase64String(eventJsonBase64);
-                var decodedJson = System.Text.Encoding.UTF8.GetString(decodedBytes);
-                _logger.LogInformation("✓ Verificação Base64: Decodificação bem-sucedida, {DecodedLength} caracteres", decodedJson.Length);
+                throw new ArgumentNullException(nameof(eventData), "Event data cannot be null");
             }
-            catch (Exception decodeEx)
-            {
-                _logger.LogError(decodeEx, "✗ Erro na verificação Base64");
-            }
-
-            // Obter client da fila
-            var queueClient = _queueClientFactory.GetQueueClient(queueName);
+            await _publishEndpoint.Publish(eventData, cancellationToken);
             
-            // Publicar na fila (agora com conteúdo codificado em base64)
-            await queueClient.SendMessageAsync(eventJsonBase64, cancellationToken);
-            
-            _logger.LogInformation("✓ Evento publicado com sucesso na fila {QueueName} (codificado em base64)", queueName);
+            _logger.LogInformation("✓ Evento publicado com sucesso na fila SQS {QueueName} via MassTransit", queueName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao publicar evento na fila {QueueName}", queueName);
+            _logger.LogError(ex, "Erro ao publicar evento na fila SQS {QueueName} via MassTransit", queueName);
             throw;
         }
     }
@@ -106,10 +92,10 @@ public class EventPublisher : IEventPublisher
             _logger.LogInformation("Publicando evento {EventType}: PaymentId={PaymentId}, CorrelationId={CorrelationId}", 
                 eventType, paymentId, correlationId);
 
-            // Por enquanto, apenas logamos o evento
+            // Por enquanto, apenas logamos o evento (não há fila específica para esses eventos)
             _logger.LogInformation("Evento publicado: {Event}", paymentEvent);
             
-            await Task.CompletedTask; // Simular operação assíncrona
+            await Task.CompletedTask;
         }
         catch (Exception ex)
         {
