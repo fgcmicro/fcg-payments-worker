@@ -1,12 +1,16 @@
+using FCGPagamentos.Application.DTOs;
 using FCGPagamentos.Worker.Models;
 using FCGPagamentos.Worker.Services;
 using MassTransit;
 using Microsoft.Extensions.Logging;
+using PaymentRequestedMessageApi = FCGPagamentos.Application.DTOs.PaymentRequestedMessage;
+using PaymentRequestedMessageWorker = FCGPagamentos.Worker.Models.PaymentRequestedMessage;
 
 namespace FCGPagamentos.Worker.Workers;
 
 // Consumer para processar mensagens da fila payments-to-process
-public class ProcessPaymentConsumer : IConsumer<PaymentRequestedMessage>
+// Aceita o formato da API (FCGPagamentos.Application.DTOs:PaymentRequestedMessage)
+public class ProcessPaymentConsumer : IConsumer<PaymentRequestedMessageApi>
 {
     private readonly IPaymentService _paymentService;
     private readonly IObservabilityService _observabilityService;
@@ -22,15 +26,16 @@ public class ProcessPaymentConsumer : IConsumer<PaymentRequestedMessage>
         _logger = logger;
     }
 
-    public async Task Consume(ConsumeContext<PaymentRequestedMessage> context)
+    public async Task Consume(ConsumeContext<PaymentRequestedMessageApi> context)
     {
-        var paymentMessage = context.Message;
-        
-        _logger.LogInformation("Processando mensagem PaymentRequested: PaymentId={PaymentId}, CorrelationId={CorrelationId}, UserId={UserId}, GameId={GameId}",
-            paymentMessage.PaymentId, paymentMessage.CorrelationId, paymentMessage.UserId, paymentMessage.GameId);
-
         try
         {
+            // Converter o DTO da API para o modelo do worker
+            var paymentMessage = context.Message.ToPaymentRequestedMessage(); // Retorna PaymentRequestedMessageWorker
+            
+            _logger.LogInformation("Processando mensagem PaymentRequested: PaymentId={PaymentId}, CorrelationId={CorrelationId}, UserId={UserId}, GameId={GameId}",
+                paymentMessage.PaymentId, paymentMessage.CorrelationId, paymentMessage.UserId, paymentMessage.GameId);
+
             // Configurar correlation ID para traces distribuídos
             _observabilityService.SetCorrelationId(paymentMessage.CorrelationId);
 
@@ -49,8 +54,11 @@ public class ProcessPaymentConsumer : IConsumer<PaymentRequestedMessage>
         }
         catch (Exception ex)
         {
+            var paymentId = context.Message?.PaymentId ?? "unknown";
+            var correlationId = context.Message?.CorrelationId ?? "unknown";
+            
             _logger.LogError(ex, "Erro ao processar mensagem PaymentRequested. PaymentId: {PaymentId}, CorrelationId: {CorrelationId}",
-                paymentMessage.PaymentId, paymentMessage.CorrelationId);
+                paymentId, correlationId);
             throw; // Re-throw para que MassTransit possa fazer retry
         }
     }

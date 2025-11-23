@@ -7,12 +7,12 @@ namespace FCGPagamentos.Worker.Services;
 public class EventPublisher : IEventPublisher
 {
     private readonly ILogger<EventPublisher> _logger;
-    private readonly IPublishEndpoint _publishEndpoint;
+    private readonly ISendEndpointProvider _sendEndpointProvider;
 
-    public EventPublisher(ILogger<EventPublisher> logger, IPublishEndpoint publishEndpoint)
+    public EventPublisher(ILogger<EventPublisher> logger, ISendEndpointProvider sendEndpointProvider)
     {
         _logger = logger;
-        _publishEndpoint = publishEndpoint;
+        _sendEndpointProvider = sendEndpointProvider;
     }
 
     public async Task PublishPaymentProcessingAsync(Guid paymentId, Guid correlationId, CancellationToken cancellationToken = default)
@@ -43,15 +43,15 @@ public class EventPublisher : IEventPublisher
         
         try
         {
-            // Publicar usando MassTransit - o nome da fila é configurado via SetEntityName no ServiceCollectionExtensions
-            await _publishEndpoint.Publish(completedEvent, cancellationToken);
+            var endpoint = await _sendEndpointProvider.GetSendEndpoint(new Uri("queue:game-purchase-completed"));
+            await endpoint.Send(completedEvent, cancellationToken);
             
-            _logger.LogInformation("✓ Evento GamePurchaseCompleted publicado com sucesso via MassTransit. PaymentId: {PaymentId}", 
+            _logger.LogInformation("✓ Evento GamePurchaseCompleted enviado com sucesso para fila SQS. PaymentId: {PaymentId}", 
                 completedEvent.PaymentId);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao publicar evento GamePurchaseCompleted via MassTransit. PaymentId: {PaymentId}", 
+            _logger.LogError(ex, "Erro ao enviar evento GamePurchaseCompleted para fila SQS. PaymentId: {PaymentId}", 
                 completedEvent.PaymentId);
             throw;
         }
@@ -59,26 +59,25 @@ public class EventPublisher : IEventPublisher
         _logger.LogInformation("=== FIM PUBLICAÇÃO GAME PURCHASE COMPLETED ===");
     }
 
-    // Método genérico para publicar em qualquer fila usando MassTransit
     public async Task PublishToQueueAsync<T>(string queueName, T eventData, CancellationToken cancellationToken = default)
     {
         try
         {
-            _logger.LogInformation("Publicando evento na fila SQS {QueueName} via MassTransit", queueName);
+            _logger.LogInformation("Enviando evento para fila SQS {QueueName} via MassTransit", queueName);
 
-            // MassTransit publica diretamente o objeto - serialização é automática
-            // Para SQS, o nome da fila é determinado pelo tipo da mensagem ou pode ser configurado via SetEntityName
             if (eventData == null)
             {
                 throw new ArgumentNullException(nameof(eventData), "Event data cannot be null");
             }
-            await _publishEndpoint.Publish(eventData, cancellationToken);
+
+            var endpoint = await _sendEndpointProvider.GetSendEndpoint(new Uri($"queue:{queueName}"));
+            await endpoint.Send(eventData, cancellationToken);
             
-            _logger.LogInformation("✓ Evento publicado com sucesso na fila SQS {QueueName} via MassTransit", queueName);
+            _logger.LogInformation("✓ Evento enviado com sucesso para fila SQS {QueueName} via MassTransit", queueName);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao publicar evento na fila SQS {QueueName} via MassTransit", queueName);
+            _logger.LogError(ex, "Erro ao enviar evento para fila SQS {QueueName} via MassTransit", queueName);
             throw;
         }
     }

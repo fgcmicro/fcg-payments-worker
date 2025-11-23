@@ -1,0 +1,71 @@
+using System.Text.Json.Serialization;
+
+namespace FCGPagamentos.Application.DTOs;
+
+// DTO que corresponde exatamente ao formato enviado pela API
+// Usa o mesmo namespace que a API para compatibilidade com MassTransit
+// Isso permite que o MassTransit deserialize mensagens com messageType: "urn:message:FCGPagamentos.Application.DTOs:PaymentRequestedMessage"
+public class PaymentRequestedMessage
+{
+    [JsonPropertyName("paymentId")]
+    public string PaymentId { get; set; } = string.Empty;
+
+    [JsonPropertyName("correlationId")]
+    public string CorrelationId { get; set; } = string.Empty;
+
+    [JsonPropertyName("userId")]
+    public string UserId { get; set; } = string.Empty;
+
+    [JsonPropertyName("gameId")]
+    public string GameId { get; set; } = string.Empty;
+
+    [JsonPropertyName("amount")]
+    public string Amount { get; set; } = string.Empty; // Vem como string da API
+
+    [JsonPropertyName("currency")]
+    public string Currency { get; set; } = string.Empty;
+
+    [JsonPropertyName("paymentMethod")]
+    public string PaymentMethod { get; set; } = string.Empty;
+
+    [JsonPropertyName("occurredAt")]
+    public DateTime OccurredAt { get; set; }
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = string.Empty;
+
+    public Worker.Models.PaymentRequestedMessage ToPaymentRequestedMessage()
+    {
+        return new Worker.Models.PaymentRequestedMessage(
+            ParseGuid(PaymentId, nameof(PaymentId)),
+            ParseGuid(CorrelationId, nameof(CorrelationId)),
+            ParseGuid(UserId, nameof(UserId)),
+            GameId,
+            decimal.Parse(Amount), // Converter string para decimal
+            Currency,
+            PaymentMethod,
+            OccurredAt,
+            Version
+        );
+    }
+
+    private static Guid ParseGuid(string value, string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new ArgumentException($"O campo {fieldName} não pode ser nulo ou vazio.", fieldName);
+        }
+
+        if (Guid.TryParse(value, out var guid))
+        {
+            return guid;
+        }
+
+        // Se não for um GUID válido, gerar um GUID determinístico baseado no valor
+        var bytes = System.Text.Encoding.UTF8.GetBytes(value);
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        var guidBytes = new byte[16];
+        Array.Copy(hash, 0, guidBytes, 0, 16);
+        return new Guid(guidBytes);
+    }
+}

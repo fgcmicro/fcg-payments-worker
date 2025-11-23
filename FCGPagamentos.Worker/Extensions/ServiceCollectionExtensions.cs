@@ -25,7 +25,6 @@ public static class ServiceCollectionExtensions
         var accessKey = configuration["AWS:AccessKey"];
         var secretKey = configuration["AWS:SecretKey"];
         var region = configuration["AWS:Region"];
-        var accountId = configuration["AWS:AccountId"];
 
         if (string.IsNullOrEmpty(accessKey))
             throw new InvalidOperationException("AWS:AccessKey não configurado");
@@ -33,8 +32,6 @@ public static class ServiceCollectionExtensions
             throw new InvalidOperationException("AWS:SecretKey não configurado");
         if (string.IsNullOrEmpty(region))
             throw new InvalidOperationException("AWS:Region não configurado");
-        if (string.IsNullOrEmpty(accountId))
-            throw new InvalidOperationException("AWS:AccountId não configurado");
 
         // Configurar MassTransit com Amazon SQS para Kubernetes
         // Configura tanto consumo quanto publicação de mensagens
@@ -58,13 +55,7 @@ public static class ServiceCollectionExtensions
                 cfg.ReceiveEndpoint("payments-to-process", e =>
                 {
                     e.ConfigureConsumer<Workers.ProcessPaymentConsumer>(context);
-                    e.PrefetchCount = 10; // Processar até 10 mensagens por vez
-                });
-
-                // Configurar publicação
-                cfg.Message<Models.GamePurchaseCompletedEvent>(m =>
-                {
-                    m.SetEntityName("game-purchase-completed");
+                    e.PrefetchCount = 10;
                 });
             });
 
