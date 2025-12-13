@@ -1,9 +1,11 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: fcg-payments-worker-config
+  name: payments-worker-config
+  namespace: payments-worker
+  labels:
+    app: payments-worker
 data:
-  payments-api-base-url: "http://payments-api:5080"
-  aws-region: "us-east-1"
-  aws-account-id: "238576301773"
-
+  AWS__Region: "us-east-1"
+  AWS__AccountId: "${ACC_ID}"
+  PaymentsApi__BaseUrl: "http://payments-service.payments.svc.cluster.local"

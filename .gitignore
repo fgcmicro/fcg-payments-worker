@@ -272,3 +272,7 @@ __pycache__/
 
 # Specific project obj folders
 **/obj/
+
+# Kubernetes secrets (não commitar)
+k8s/secret.yaml
+k8s/**/processed/

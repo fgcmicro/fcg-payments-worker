@@ -1,14 +1,17 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: fcg-payments-worker-hpa
+  name: payments-worker-hpa
+  namespace: payments-worker
+  labels:
+    app: payments-worker
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: fcg-payments-worker
-  minReplicas: 2
-  maxReplicas: 10
+    name: payments-worker-deployment
+  minReplicas: 1
+  maxReplicas: 5
   metrics:
   - type: Resource
     resource:
@@ -34,9 +37,8 @@ spec:
       policies:
       - type: Percent
         value: 100
-        periodSeconds: 60
+        periodSeconds: 30
       - type: Pods
         value: 2
-        periodSeconds: 60
+        periodSeconds: 30
       selectPolicy: Max
-
