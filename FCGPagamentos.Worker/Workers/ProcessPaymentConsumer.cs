@@ -30,8 +30,14 @@ public class ProcessPaymentConsumer : IConsumer<PaymentRequestedMessageApi>
     {
         try
         {
+            _logger.LogInformation("Mensagem recebida - Amount (string): '{Amount}', PaymentId: {PaymentId}", 
+                context.Message.Amount, context.Message.PaymentId);
+            
             // Converter o DTO da API para o modelo do worker
             var paymentMessage = context.Message.ToPaymentRequestedMessage(); // Retorna PaymentRequestedMessageWorker
+            
+            _logger.LogInformation("Mensagem convertida - Amount (decimal): {Amount}, PaymentId: {PaymentId}", 
+                paymentMessage.Amount, paymentMessage.PaymentId);
             
             _logger.LogInformation("Processando mensagem PaymentRequested: PaymentId={PaymentId}, CorrelationId={CorrelationId}, UserId={UserId}, GameId={GameId}",
                 paymentMessage.PaymentId, paymentMessage.CorrelationId, paymentMessage.UserId, paymentMessage.GameId);

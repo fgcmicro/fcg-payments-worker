@@ -1,3 +1,4 @@
+using Amazon.Runtime;
 using FCGPagamentos.Worker.Services;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
@@ -24,6 +25,7 @@ public static class ServiceCollectionExtensions
         // Configurar AWS Credentials
         var accessKey = configuration["AWS:AccessKey"];
         var secretKey = configuration["AWS:SecretKey"];
+        var sessionToken = configuration["AWS:SessionToken"];
         var region = configuration["AWS:Region"];
 
         if (string.IsNullOrEmpty(accessKey))
@@ -41,8 +43,16 @@ public static class ServiceCollectionExtensions
             {
                 cfg.Host(region, h =>
                 {
-                    h.AccessKey(accessKey);
-                    h.SecretKey(secretKey);
+                    AWSCredentials credentials;
+                    if (!string.IsNullOrEmpty(sessionToken))
+                    {
+                        credentials = new SessionAWSCredentials(accessKey, secretKey, sessionToken);
+                    }
+                    else
+                    {
+                        credentials = new BasicAWSCredentials(accessKey, secretKey);
+                    }
+                    h.Credentials(credentials);
                 });
 
                 // Configurar filas para consumo
