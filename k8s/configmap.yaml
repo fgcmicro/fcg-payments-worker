@@ -7,5 +7,5 @@ metadata:
     app: payments-worker
 data:
   AWS__Region: "us-east-1"
-  AWS__AccountId: "${ACC_ID}"
+  AWS__AccountId: "${AWS_ACCOUNT_ID}"
   PaymentsApi__BaseUrl: "http://payments-service.payments.svc.cluster.local"
