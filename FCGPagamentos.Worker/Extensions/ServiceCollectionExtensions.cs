@@ -80,6 +80,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IEventPublisher, EventPublisher>();
         services.AddScoped<IObservabilityService, ObservabilityService>();
+        
+        // Configurar AWS X-Ray para APM
+        services.AddXRay(configuration);
 
         return services;
     }
