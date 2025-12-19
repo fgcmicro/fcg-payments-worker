@@ -11,6 +11,13 @@ O FCG Payments Worker é responsável por processar pagamentos de jogos de forma
 
 ## 🏗️ Arquitetura
 
+Este worker faz parte de uma arquitetura de microsserviços orquestrada no Kubernetes. Para documentação completa da arquitetura e fluxo assíncrono, consulte:
+
+- **[Arquitetura do Sistema](../fcg.GameService/docs/architecture.md)**: Diagrama completo da arquitetura no Kubernetes
+- **[Fluxo de Comunicação Assíncrona](../fcg.GameService/docs/async-communication.md)**: Documentação detalhada do fluxo de mensagens
+
+### Diagrama Simplificado
+
 ```
 ┌─────────────────────┐         ┌─────────────────────┐         ┌─────────────────────┐
 │   Game Purchase     │────────▶│  game-purchase-     │────────▶│  GamePurchase       │
