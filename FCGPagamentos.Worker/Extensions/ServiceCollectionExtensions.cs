@@ -1,5 +1,6 @@
 using Amazon.Runtime;
 using FCGPagamentos.Worker.Services;
+using fcg.Contracts;
 using MassTransit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,12 +27,8 @@ public static class ServiceCollectionExtensions
         var accessKey = configuration["AWS:AccessKey"];
         var secretKey = configuration["AWS:SecretKey"];
         var sessionToken = configuration["AWS:SessionToken"];
-        var region = configuration["AWS:Region"];
+        var region = configuration["AWS:Region"] ?? "us-east-1"; // Default para us-east-1
 
-        if (string.IsNullOrEmpty(accessKey))
-            throw new InvalidOperationException("AWS:AccessKey não configurado");
-        if (string.IsNullOrEmpty(secretKey))
-            throw new InvalidOperationException("AWS:SecretKey não configurado");
         if (string.IsNullOrEmpty(region))
             throw new InvalidOperationException("AWS:Region não configurado");
 
@@ -43,16 +40,31 @@ public static class ServiceCollectionExtensions
             {
                 cfg.Host(region, h =>
                 {
-                    AWSCredentials credentials;
-                    if (!string.IsNullOrEmpty(sessionToken))
+                    // Se credenciais estiverem configuradas, usar elas
+                    // Caso contrário, usar o perfil AWS padrão (busca automaticamente de ~/.aws/credentials ou variáveis de ambiente)
+                    if (!string.IsNullOrEmpty(accessKey) && !string.IsNullOrEmpty(secretKey))
                     {
-                        credentials = new SessionAWSCredentials(accessKey, secretKey, sessionToken);
+                        AWSCredentials credentials;
+                        if (!string.IsNullOrEmpty(sessionToken))
+                        {
+                            credentials = new SessionAWSCredentials(accessKey, secretKey, sessionToken);
+                        }
+                        else
+                        {
+                            credentials = new BasicAWSCredentials(accessKey, secretKey);
+                        }
+                        h.Credentials(credentials);
                     }
-                    else
-                    {
-                        credentials = new BasicAWSCredentials(accessKey, secretKey);
-                    }
-                    h.Credentials(credentials);
+                    // Se não houver credenciais configuradas, o AWS SDK usará automaticamente:
+                    // 1. Variáveis de ambiente (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY)
+                    // 2. Perfil AWS (~/.aws/credentials)
+                    // 3. IAM Role (se rodando no EC2/ECS/Lambda)
+                });
+
+                // Configurar mapeamento de mensagens para filas
+                cfg.Message<GamePurchaseRequested>(m =>
+                {
+                    m.SetEntityName("game-purchase-requested");
                 });
 
                 // Configurar filas para consumo

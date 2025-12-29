@@ -1,12 +1,13 @@
 using FCGPagamentos.Worker.Models;
 using FCGPagamentos.Worker.Services;
+using fcg.Contracts;
 using MassTransit;
 using Microsoft.Extensions.Logging;
 
 namespace FCGPagamentos.Worker.Workers;
 
 // Consumer para processar mensagens da fila game-purchase-requested
-public class GamePurchaseRequestedConsumer : IConsumer<GamePurchaseRequestedEvent>
+public class GamePurchaseRequestedConsumer : IConsumer<GamePurchaseRequested>
 {
     private readonly IPaymentService _paymentService;
     private readonly IObservabilityService _observabilityService;
@@ -20,12 +21,18 @@ public class GamePurchaseRequestedConsumer : IConsumer<GamePurchaseRequestedEven
         _paymentService = paymentService;
         _observabilityService = observabilityService;
         _logger = logger;
+        
+        // Log de diagnóstico para verificar se o consumer está sendo instanciado
+        _logger.LogInformation("[GAME-PURCHASE-REQUESTED] Consumer instanciado e pronto para receber mensagens");
     }
 
-    public async Task Consume(ConsumeContext<GamePurchaseRequestedEvent> context)
+    public async Task Consume(ConsumeContext<GamePurchaseRequested> context)
     {
         var startTime = DateTime.UtcNow;
-        var purchaseEvent = context.Message;
+        var purchaseMessage = context.Message;
+        
+        // Converter GamePurchaseRequested para GamePurchaseRequestedEvent
+        var purchaseEvent = purchaseMessage.ToGamePurchaseRequestedEvent();
         
         _logger.LogInformation("[GAME-PURCHASE-REQUESTED] INÍCIO - Recebida mensagem da fila. PaymentId={PaymentId}, CorrelationId={CorrelationId}, UserId={UserId}, GameId={GameId}, Amount={Amount}, Currency={Currency}, PaymentMethod={PaymentMethod}, MessageId={MessageId}, Timestamp={Timestamp}",
             purchaseEvent.PaymentId, 

@@ -80,10 +80,14 @@ public class Program
                 logging.AddConsole();
                 logging.AddConfiguration(context.Configuration.GetSection("Logging"));
                 
+                // Habilitar logs detalhados do MassTransit para diagnóstico
+                logging.AddFilter("MassTransit", LogLevel.Debug);
+                logging.AddFilter("MassTransit.AmazonSqsTransport", LogLevel.Debug);
+                
                 // Filtrar logs de health checks do middleware de diagnóstico
                 // Mantém logs de Information dos workers (FCGPagamentos.Worker.*, MassTransit.*)
                 logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", 
-                    (category, logLevel) => 
+                    logLevel => 
                     {
                         // Filtrar apenas logs de Information que são relacionados a endpoints
                         // Logs de Error e Warning são mantidos
