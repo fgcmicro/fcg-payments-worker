@@ -79,5 +79,15 @@ public class Program
                 logging.ClearProviders();
                 logging.AddConsole();
                 logging.AddConfiguration(context.Configuration.GetSection("Logging"));
+                
+                // Filtrar logs de health checks do middleware de diagnóstico
+                // Mantém logs de Information dos workers (FCGPagamentos.Worker.*, MassTransit.*)
+                logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", 
+                    (category, logLevel) => 
+                    {
+                        // Filtrar apenas logs de Information que são relacionados a endpoints
+                        // Logs de Error e Warning são mantidos
+                        return logLevel > LogLevel.Information;
+                    });
             });
 }
