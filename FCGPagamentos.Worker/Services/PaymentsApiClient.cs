@@ -2,6 +2,7 @@ using FCGPagamentos.Worker.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace FCGPagamentos.Worker.Services;
 
@@ -32,28 +33,52 @@ public class PaymentsApiClient : IPaymentsApiClient
     {
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var endpoint = "/internal/payments";
+        var startTime = DateTime.UtcNow;
+        
+        _logger.LogInformation("[API-CALL] INÍCIO - Chamada HTTP POST para criar pagamento. PaymentId={PaymentId}, CorrelationId={CorrelationId}, Endpoint={Endpoint}, BaseUrl={BaseUrl}, Timestamp={Timestamp}",
+            request.PaymentId, request.CorrelationId, endpoint, _baseUrl, startTime);
         
         try
         {
             var content = JsonContent.Create(request);
+            _logger.LogDebug("[API-CALL] Enviando requisição HTTP. PaymentId={PaymentId}, CorrelationId={CorrelationId}, RequestPayload={RequestPayload}",
+                request.PaymentId, request.CorrelationId, System.Text.Json.JsonSerializer.Serialize(request));
+            
             var response = await _httpClient.PostAsync($"{_baseUrl}{endpoint}", content, cancellationToken);
             stopwatch.Stop();
+            
+            var responseTime = DateTime.UtcNow;
+            var duration = stopwatch.Elapsed.TotalMilliseconds;
+            
+            _logger.LogInformation("[API-CALL] Resposta recebida. PaymentId={PaymentId}, CorrelationId={CorrelationId}, StatusCode={StatusCode}, DurationMs={DurationMs}, Timestamp={Timestamp}",
+                request.PaymentId, request.CorrelationId, (int)response.StatusCode, duration, responseTime);
             
             if (response.IsSuccessStatusCode)
             {
                 _observabilityService.TrackApiDependency("POST", endpoint, stopwatch.Elapsed, true);
-                return await response.Content.ReadFromJsonAsync<Payment>(cancellationToken: cancellationToken);
+                var payment = await response.Content.ReadFromJsonAsync<Payment>(cancellationToken: cancellationToken);
+                
+                _logger.LogInformation("[API-CALL] SUCESSO - Pagamento criado na API. PaymentId={PaymentId}, CorrelationId={CorrelationId}, PaymentStatus={PaymentStatus}, DurationMs={DurationMs}",
+                    request.PaymentId, request.CorrelationId, payment?.Status, duration);
+                
+                return payment;
             }
             
+            var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
             _observabilityService.TrackApiDependency("POST", endpoint, stopwatch.Elapsed, false);
-            _logger.LogWarning("Falha ao criar pagamento. Status: {StatusCode}", response.StatusCode);
+            _logger.LogWarning("[API-CALL] FALHA - Resposta não bem-sucedida da API. PaymentId={PaymentId}, CorrelationId={CorrelationId}, StatusCode={StatusCode}, ErrorContent={ErrorContent}, DurationMs={DurationMs}, Timestamp={Timestamp}",
+                request.PaymentId, request.CorrelationId, (int)response.StatusCode, errorContent, duration, responseTime);
             return null;
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
+            var endTime = DateTime.UtcNow;
+            var duration = stopwatch.Elapsed.TotalMilliseconds;
+            
             _observabilityService.TrackApiDependency("POST", endpoint, stopwatch.Elapsed, false);
-            _logger.LogError(ex, "Erro ao criar pagamento");
+            _logger.LogError(ex, "[API-CALL] ERRO - Exceção ao chamar API. PaymentId={PaymentId}, CorrelationId={CorrelationId}, Endpoint={Endpoint}, DurationMs={DurationMs}, Timestamp={Timestamp}, ExceptionType={ExceptionType}, ExceptionMessage={ExceptionMessage}",
+                request.PaymentId, request.CorrelationId, endpoint, duration, endTime, ex.GetType().Name, ex.Message);
             throw;
         }
     }

@@ -156,7 +156,16 @@ public class PaymentService : IPaymentService
 
     public async Task<bool> CreatePaymentAsync(GamePurchaseRequestedEvent purchaseEvent, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Criando pagamento {PaymentId} para usuário {UserId}", purchaseEvent.PaymentId, purchaseEvent.UserId);
+        var startTime = DateTime.UtcNow;
+        _logger.LogInformation("[CREATE-PAYMENT] INÍCIO - Iniciando criação de pagamento. PaymentId={PaymentId}, UserId={UserId}, GameId={GameId}, Amount={Amount}, Currency={Currency}, PaymentMethod={PaymentMethod}, CorrelationId={CorrelationId}, Timestamp={Timestamp}",
+            purchaseEvent.PaymentId, 
+            purchaseEvent.UserId, 
+            purchaseEvent.GameId,
+            purchaseEvent.Amount,
+            purchaseEvent.Currency,
+            purchaseEvent.PaymentMethod,
+            purchaseEvent.CorrelationId,
+            startTime);
         
         _observabilityService.SetCorrelationId(purchaseEvent.CorrelationId);
         using var activity = _observabilityService.StartPaymentProcessingActivity(purchaseEvent.PaymentId, purchaseEvent.CorrelationId);
@@ -164,11 +173,14 @@ public class PaymentService : IPaymentService
         try
         {
             // Validar evento
+            _logger.LogDebug("[CREATE-PAYMENT] Validando evento de compra. PaymentId={PaymentId}", purchaseEvent.PaymentId);
             if (!ValidatePurchaseEvent(purchaseEvent, out var validationError))
             {
-                _logger.LogError("Evento de compra inválido: {Error}", validationError);
+                _logger.LogError("[CREATE-PAYMENT] VALIDAÇÃO FALHOU - Evento de compra inválido. PaymentId={PaymentId}, CorrelationId={CorrelationId}, ValidationError={ValidationError}, Timestamp={Timestamp}",
+                    purchaseEvent.PaymentId, purchaseEvent.CorrelationId, validationError, DateTime.UtcNow);
                 return false;
             }
+            _logger.LogDebug("[CREATE-PAYMENT] Validação bem-sucedida. PaymentId={PaymentId}", purchaseEvent.PaymentId);
 
             // Criar pagamento na API (API vai publicar PaymentCreated + PaymentQueued)
             var createRequest = new CreatePaymentRequest(
@@ -181,19 +193,39 @@ public class PaymentService : IPaymentService
                 CorrelationId: purchaseEvent.CorrelationId
             );
 
+            _logger.LogInformation("[CREATE-PAYMENT] Chamando API para criar pagamento. PaymentId={PaymentId}, CorrelationId={CorrelationId}, ApiEndpoint=/internal/payments",
+                purchaseEvent.PaymentId, purchaseEvent.CorrelationId);
+
             var payment = await _apiClient.CreatePaymentAsync(createRequest, cancellationToken);
+            
+            var endTime = DateTime.UtcNow;
+            var duration = (endTime - startTime).TotalMilliseconds;
+            
             if (payment == null)
             {
-                _logger.LogError("Falha ao criar pagamento {PaymentId} na API", purchaseEvent.PaymentId);
+                _logger.LogError("[CREATE-PAYMENT] FALHA - API retornou null ao criar pagamento. PaymentId={PaymentId}, CorrelationId={CorrelationId}, DurationMs={DurationMs}, Timestamp={Timestamp}",
+                    purchaseEvent.PaymentId, purchaseEvent.CorrelationId, duration, endTime);
                 return false;
             }
 
-            _logger.LogInformation("Pagamento {PaymentId} criado com sucesso", purchaseEvent.PaymentId);
+            _logger.LogInformation("[CREATE-PAYMENT] SUCESSO - Pagamento criado na API. PaymentId={PaymentId}, CorrelationId={CorrelationId}, Status={Status}, DurationMs={DurationMs}, Timestamp={Timestamp}",
+                purchaseEvent.PaymentId, purchaseEvent.CorrelationId, payment.Status, duration, endTime);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Erro ao criar pagamento {PaymentId}", purchaseEvent.PaymentId);
+            var endTime = DateTime.UtcNow;
+            var duration = (endTime - startTime).TotalMilliseconds;
+            
+            _logger.LogError(ex, "[CREATE-PAYMENT] ERRO - Exceção ao criar pagamento. PaymentId={PaymentId}, CorrelationId={CorrelationId}, UserId={UserId}, GameId={GameId}, DurationMs={DurationMs}, Timestamp={Timestamp}, ExceptionType={ExceptionType}, ExceptionMessage={ExceptionMessage}",
+                purchaseEvent.PaymentId, 
+                purchaseEvent.CorrelationId,
+                purchaseEvent.UserId,
+                purchaseEvent.GameId,
+                duration,
+                endTime,
+                ex.GetType().Name,
+                ex.Message);
             return false;
         }
     }
