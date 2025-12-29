@@ -78,6 +78,8 @@ public class Program
             {
                 logging.ClearProviders();
                 logging.AddConsole();
+                
+                // Carregar configuração de logging primeiro
                 logging.AddConfiguration(context.Configuration.GetSection("Logging"));
                 
                 // Habilitar logs detalhados do MassTransit para diagnóstico
@@ -93,5 +95,9 @@ public class Program
                         // Logs de Error e Warning são mantidos
                         return logLevel > LogLevel.Information;
                     });
+                
+                // Filtrar logs de health checks do EndpointMiddleware (que gera logs de "Executing/Executed endpoint")
+                // IMPORTANTE: Este filtro deve ser aplicado DEPOIS do AddConfiguration para sobrescrever configurações do appsettings.json
+                logging.AddFilter("Microsoft.AspNetCore.Routing.EndpointMiddleware", LogLevel.Warning);
             });
 }
